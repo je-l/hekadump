@@ -5,11 +5,11 @@
 Build the executable:
 
 ```sh
-dune build hekadump
+dune build hekadump.exe
 ```
 
 Run program:
 
 ```
-dune exec hekadump
+./_build/default/hekadump.exe
 ```
