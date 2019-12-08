@@ -14,11 +14,11 @@ type pagination_crawl_result =
     next_page       : string option;
   }
 
+type floor_count = Uniform of int | MinMax of int * int
+
 type parsed_apartment =
   { build_year      : int;
-    floor_count     : int option;
-    floor_count_min : int option;
-    floor_count_max : int option;
+    floor_count     : floor_count;
     identifier      : int;
     district        : string;
   }
@@ -75,10 +75,6 @@ let find_integer html selector =
       None -> failwith (sprintf "cannot parse int from selector %s" selector)
     | Some t -> t
 
-let regex_test (input : string) =
-  let regexx = Re.Pcre.regexp "(\\d+)-(\\d+)" in
-  Re.Pcre.extract ~rex:regexx input
-
 let fetch_apartment (url : string) : parsed_apartment Lwt.t =
   printf "parsing for url %s\n" url;
   Client.get (Uri.of_string url) >>= fun (_, body) ->
@@ -92,7 +88,6 @@ let fetch_apartment (url : string) : parsed_apartment Lwt.t =
   let district = css_string ".field--name-field-district .field__item" in
   let iden = css_int ".field--name-field-vmy-number .field__item" in
 
-  let groups = regex_test "123-456" in
   List.iter (printf "a: %s\n") (Array.to_list groups);
 
   { build_year;
