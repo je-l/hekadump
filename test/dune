@@ -1,0 +1,8 @@
+(executable
+ (name hekadump_test)
+ (libraries alcotest hekadump))
+
+(rule
+ (alias runtest)
+ (action
+  (run ./hekadump_test.exe)))

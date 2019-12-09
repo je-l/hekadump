@@ -2,20 +2,23 @@ open Lwt
 open Cohttp_lwt_unix
 open Soup
 open Printf
-(* open Re.Perl *)
+open Re
 
 let initial_page = "https://www.hekaoy.fi/fi/asunnot/kohteet"
 let root_page = "https://www.hekaoy.fi"
 
 let debug = true
 
+(** Single page, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet?page=3 *)
 type pagination_crawl_result =
   { apartment_links : string list;
     next_page       : string option;
   }
 
+(** Some apartments list floor count as range, e.g. 3-4 *)
 type floor_count = Uniform of int | MinMax of int * int
 
+(** Single apartment, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet/hilda-flodinin-kuja-2 *)
 type parsed_apartment =
   { build_year      : int;
     floor_count     : floor_count;
@@ -23,9 +26,8 @@ type parsed_apartment =
     district        : string;
   }
 
-let parse_next_page (page_soup : soup node) : string option =
-  let element = select_one ".pager__item--next a" page_soup in
-  match element with
+let parse_next_page (html : soup node) : string option =
+  match select_one ".pager__item--next a" html with
       None -> None
     | Some el -> match attribute "href" el with
         None -> None
@@ -75,6 +77,33 @@ let find_integer html selector =
       None -> failwith (sprintf "cannot parse int from selector %s" selector)
     | Some t -> t
 
+let parse_floor_text (text : string) : floor_count option =
+  let regex = Pcre.regexp "(\\d+) – (\\d+)" in
+  let result = try Some (Pcre.extract ~rex:regex text)
+    with Not_found -> None in
+
+  match result with
+    | Some [| _; left; right|] ->
+        Some (MinMax (int_of_string left, int_of_string right))
+    | _ -> match int_of_string_opt text with
+        None -> None
+      | Some e -> Some (Uniform e)
+
+(** Floor count CSS classes are very misleading: either one of these two is
+used. The text content might look something like "4 - 6" *)
+let parse_floor_count (html : soup node) : floor_count option =
+  let element = match select_one ".field--name-field-num-floors-min .field__item" html with
+    None -> (match select_one ".field--name-field-num-floors-max .field__item" html with
+        None -> None
+      | Some e -> Some e)
+    | Some t -> Some t in
+
+  match element with
+      None -> None
+    | Some e -> match leaf_text e with
+        None -> None
+      | Some t -> parse_floor_text t
+
 let fetch_apartment (url : string) : parsed_apartment Lwt.t =
   printf "parsing for url %s\n" url;
   Client.get (Uri.of_string url) >>= fun (_, body) ->
@@ -82,26 +111,23 @@ let fetch_apartment (url : string) : parsed_apartment Lwt.t =
   let html = parse body in
   let css_string = find_string html in
   let css_int = find_integer html in
-  let css_int_opt = find_integer_opt html in
   let build_year = css_int ".field--name-field-year-built .field__item" in
-  let floors = css_int_opt ".field--name-field-num-floors-min .field__item" in
   let district = css_string ".field--name-field-district .field__item" in
   let iden = css_int ".field--name-field-vmy-number .field__item" in
 
-  List.iter (printf "a: %s\n") (Array.to_list groups);
+  let floor_count = match parse_floor_count html with
+      None -> failwith (sprintf "cannot parse floor count for %s" url)
+    | Some t -> t in
 
   { build_year;
-    floor_count = floors;
+    floor_count = floor_count;
     district = district;
     identifier = iden;
-    floor_count_min = Some 1;
-    floor_count_max = Some 2;
   }
 
-let () =
+let aa () =
   let apartment_links = crawl_all_pages initial_page in
 
   (* fetch all apartments in single page concurrently ! *)
   let apartments = Lwt_main.run (Lwt_list.map_p fetch_apartment apartment_links) in
   printf "%d\n" (List.length apartments);
-  List.iter (fun a -> printf "floors: %d\n" (match a.floor_count with Some f -> f | None -> -1)) apartments
