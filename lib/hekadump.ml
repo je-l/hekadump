@@ -11,19 +11,19 @@ let debug = true
 
 (** Single page, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet?page=3 *)
 type pagination_crawl_result =
-  { apartment_links : string list;
-    next_page       : string option;
+  { house_links : string list;
+    next_page   : string option;
   }
 
-(** Some apartments list floor count as range, e.g. 3-4 *)
+(** Some houses list floor count as range, e.g. 3-4 *)
 type floor_count = Uniform of int | MinMax of int * int
 
-(** Single apartment, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet/hilda-flodinin-kuja-2 *)
-type parsed_apartment =
-  { build_year      : int;
-    floor_count     : floor_count;
-    identifier      : int;
-    district        : string;
+(** Single house building, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet/hilda-flodinin-kuja-2 *)
+type parsed_house =
+  { build_year  : int;
+    floor_count : floor_count;
+    identifier  : int;
+    district    : string;
   }
 
 let parse_next_page (html : soup node) : string option =
@@ -33,7 +33,7 @@ let parse_next_page (html : soup node) : string option =
         None -> None
       | Some link -> Some (initial_page ^ link)
 
-let parse_page_apartments (html : soup node) : string list =
+let parse_page_houses (html : soup node) : string list =
   let link_elements = select ".node--type-kiinteisto h4 a" html in
   let maybe_links = List.map (attribute "href") (to_list link_elements) in
   let unsafe_filter el = match el with
@@ -46,19 +46,20 @@ let fetch_links (url : string) : pagination_crawl_result Lwt.t =
   Client.get (Uri.of_string url) >>= fun (_, body) ->
   body |> Cohttp_lwt.Body.to_string >|= fun body ->
   let html = parse body in
-  { apartment_links = parse_page_apartments html;
+  { house_links = parse_page_houses html;
     next_page = parse_next_page html
   }
 
-(** Extract apartment links from all pages, until no more pages are left. *)
+(** Extract house links from all pages, until no more pages are left. *)
 let rec crawl_all_pages (url : string) : string list =
+  (* TODO remove Lwt_main.run *)
   let result = Lwt_main.run (fetch_links url) in
 
   match result.next_page with
-      None -> result.apartment_links
+      None -> result.house_links
     | Some next_page -> if debug
-                        then result.apartment_links
-                        else result.apartment_links @ crawl_all_pages next_page
+                        then result.house_links
+                        else result.house_links @ crawl_all_pages next_page
 
 let find_string (html : soup node) (selector : string) : string =
   match select_one selector html with
@@ -79,10 +80,10 @@ let find_integer html selector =
 
 let parse_floor_text (text : string) : floor_count option =
   let regex = Pcre.regexp "(\\d+) – (\\d+)" in
-  let result = try Some (Pcre.extract ~rex:regex text)
+  let groups = try Some (Pcre.extract ~rex:regex text)
     with Not_found -> None in
 
-  match result with
+  match groups with
     | Some [| _; left; right|] ->
         Some (MinMax (int_of_string left, int_of_string right))
     | _ -> match int_of_string_opt text with
@@ -104,7 +105,7 @@ let parse_floor_count (html : soup node) : floor_count option =
         None -> None
       | Some t -> parse_floor_text t
 
-let fetch_apartment (url : string) : parsed_apartment Lwt.t =
+let fetch_house (url : string) : parsed_house Lwt.t =
   printf "parsing for url %s\n" url;
   Client.get (Uri.of_string url) >>= fun (_, body) ->
   body |> Cohttp_lwt.Body.to_string >|= fun body ->
@@ -126,8 +127,8 @@ let fetch_apartment (url : string) : parsed_apartment Lwt.t =
   }
 
 let run () =
-  let apartment_links = crawl_all_pages initial_page in
+  let house_links = crawl_all_pages initial_page in
 
-  (* fetch all apartments in single page concurrently ! *)
-  let apartments = Lwt_main.run (Lwt_list.map_p fetch_apartment apartment_links) in
-  printf "%d\n" (List.length apartments);
+  (* fetch all houses in single page concurrently ! *)
+  let houses = Lwt_main.run (Lwt_list.map_p fetch_house house_links) in
+  printf "%d\n" (List.length houses);
