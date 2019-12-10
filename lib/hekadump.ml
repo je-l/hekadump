@@ -15,8 +15,11 @@ type pagination_crawl_result =
     next_page   : string option;
   }
 
+type exact_or_varying = Uniform of int | MinMax of int * int
+
+
 (** Some houses list floor count as range, e.g. 3-4 *)
-type floor_count = Uniform of int | MinMax of int * int
+type floor_count = exact_or_varying
 
 (** Single house building, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet/hilda-flodinin-kuja-2 *)
 type parsed_house =
@@ -25,6 +28,28 @@ type parsed_house =
     identifier  : int;
     district    : string;
   }
+
+type apartment_size = Same of float | Varying of float * float
+
+type rent = exact_or_varying
+
+(** Single row in the apartment "asuntojakauma" table *)
+type apartment =
+  { residence_type : string;
+    sizes          : apartment_size;
+    count          : int;
+    rent           : rent;
+  }
+
+let parse_apartment_table_row (n : element node) : string =
+  let cells = select "td" n in
+  match to_list cells with
+      [typ; _; _; _] -> (match leaf_text typ with Some t -> t | None -> failwith "unexpected empty table cell")
+    | _ -> failwith "unexpected column count"
+
+let parse_apartment_table (html : soup node) : string list =
+  let rows = select ".asuntojakauma-container tbody tr" html in
+  List.map parse_apartment_table_row (to_list rows)
 
 let parse_next_page (html : soup node) : string option =
   match select_one ".pager__item--next a" html with
@@ -115,6 +140,10 @@ let fetch_house (url : string) : parsed_house Lwt.t =
   let build_year = css_int ".field--name-field-year-built .field__item" in
   let district = css_string ".field--name-field-district .field__item" in
   let iden = css_int ".field--name-field-vmy-number .field__item" in
+
+  let table = parse_apartment_table html in
+
+  List.iter (fun a -> printf "val: %s\n" a) table;
 
   let floor_count = match parse_floor_count html with
       None -> failwith (sprintf "cannot parse floor count for %s" url)
