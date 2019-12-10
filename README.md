@@ -2,16 +2,22 @@
 
 ### Development
 
+Run unit tests:
+
+```sh
+dune runtest
+```
+
 Build the executable:
 
 ```sh
-dune build hekadump.exe
+dune build
 ```
 
-Run program:
+Run the program:
 
 ```
-./_build/default/hekadump.exe
+./_build/default/main.exe
 ```
 
 ### Output format

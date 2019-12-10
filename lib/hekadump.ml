@@ -125,7 +125,7 @@ let fetch_apartment (url : string) : parsed_apartment Lwt.t =
     identifier = iden;
   }
 
-let aa () =
+let run () =
   let apartment_links = crawl_all_pages initial_page in
 
   (* fetch all apartments in single page concurrently ! *)

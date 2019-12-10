@@ -1,4 +1,4 @@
 (library
-  (name hekadump)
-  (public_name hekadump)
-  (libraries lwt cohttp cohttp-lwt-unix tls lambdasoup re alcotest))
+ (name hekadump)
+ (public_name hekadump)
+ (libraries lwt cohttp cohttp-lwt-unix tls lambdasoup re alcotest))
