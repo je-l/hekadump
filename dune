@@ -1,3 +1,7 @@
 (executable
  (name main)
  (libraries hekadump))
+
+(env
+ (dev
+  (flags (:standard -w @A))))
