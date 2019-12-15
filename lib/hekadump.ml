@@ -3,7 +3,7 @@ open Soup
 open Printf
 open Re
 
-let (>>=), (>|=) = Lwt.((>>=), (>|=))
+let (>>=), (>|=), return = Lwt.((>>=), (>|=), return)
 
 let initial_page = "https://www.hekaoy.fi/fi/asunnot/kohteet"
 let root_page = "https://www.hekaoy.fi"
@@ -111,7 +111,6 @@ let parse_apartment_count (text : string) : int option =
         Some [|_; count |] -> Some (int_of_string (String.trim count))
         | _ -> None
 
-
 let parse_apartment_table_row (el : element node) : table_row_result =
   let cells = select "td" el in
   match to_list cells with
@@ -166,9 +165,12 @@ let parse_page_houses (html : soup node) : string list =
   let links = List.map unsafe_filter maybe_links in
   List.map (fun e -> root_page ^ e) links
 
-let fetch_links (url : string) : pagination_crawl_result Lwt.t =
+let http_get (url : string) : string Lwt.t =
   Client.get (Uri.of_string url) >>= fun (_, body) ->
-  body |> Cohttp_lwt.Body.to_string >|= fun body ->
+  body |> Cohttp_lwt.Body.to_string >|= fun body -> body
+
+let fetch_links (url : string) : pagination_crawl_result Lwt.t =
+  http_get url >|= fun body ->
   let html = parse body in
   { house_links = parse_page_houses html;
     next_page = parse_next_page html
@@ -176,16 +178,15 @@ let fetch_links (url : string) : pagination_crawl_result Lwt.t =
 
 (** Extract house links from all pages, until no more pages are left. *)
 let rec crawl_all_pages (url : string) : string list Lwt.t =
-  (* TODO remove Lwt_main.run *)
-  printf "crawling page %s\n" url;
+  Lwt_io.printlf "crawling page %s" url >>= fun () ->
   fetch_links url >>= fun result ->
   let { house_links; next_page } = result in
 
   match next_page with
-      None -> house_links
-    | Some next -> if debug
-                   then house_links
-                   else house_links @ crawl_all_pages next
+      None -> return house_links
+    | Some next ->
+        if debug then return house_links
+        else crawl_all_pages next >|= fun next -> house_links @ next
 
 let find_string (page : string) (html : soup node) (selector : string) : string =
   match select_one selector html with
@@ -235,14 +236,12 @@ let detect_page_under_construction (html : soup node) : bool =
     | Some _ -> false
 
 let fetch_house (url : string) : parsed_house option Lwt.t =
-  Client.get (Uri.of_string url) >>= fun (_, body) ->
-  body |> Cohttp_lwt.Body.to_string >|= fun body ->
+  http_get url >>= fun body ->
   let html = parse body in
 
-  if detect_page_under_construction html then begin
-    printf "warning: detected page %s as under construction\n" url;
-    None
-  end
+  if detect_page_under_construction html then
+    Lwt_io.printlf "warning: detected page %s as under construction" url >|=
+    fun () -> None
   else
     let css_int = find_integer url html in
     let build_year = find_year url html in
@@ -254,15 +253,14 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
     let iden = css_int ".field--name-field-vmy-number .field__item" in
 
     let err_print_table ap = match ap with
-      Success table -> Some table
-    | Anomaly reason -> printf "weird apartment row skipped at %s: %s\n" url reason; None
+      Success table -> return @@ Some table
+    | Anomaly reason -> Lwt_io.printlf "weird apartment row skipped at %s: %s" url reason >|= fun () -> None
     | ApartmentError reason -> failwith (sprintf "failed to parse table for %s: %s" url reason) in
 
-    let apartment_table = List.filter_map err_print_table (parse_apartment_table html) in
-
+    let table = parse_apartment_table html in
     let floor_count = parse_floor_count html in
-
-    Some { build_year;
+    Lwt_list.filter_map_s err_print_table table >>= fun apartment_table ->
+    return @@ Some { build_year;
       floor_count;
       apartment_table;
       district;
@@ -299,9 +297,12 @@ let serialize_houses (houses : parsed_house list) : string list list =
   let apartments = List.map to_row houses in
   List.flatten apartments
 
-let run () =
-  let house_links = crawl_all_pages initial_page in
-  let houses = Lwt_main.run (Lwt_list.map_s fetch_house house_links) in
+let main : unit Lwt.t =
+  crawl_all_pages initial_page >>= fun house_links ->
+  Lwt_io.printlf "crawling %d house pages..." (List.length house_links) >>= fun () ->
+  Lwt_list.map_s fetch_house house_links >>= fun houses ->
   let file = "out.csv" in
   Csv.save file (serialize_houses (cat_maybes houses));
-  printf "output written to %s\n" file
+  Lwt_io.printlf "output written to %s" file
+
+let run () = Lwt_main.run main
