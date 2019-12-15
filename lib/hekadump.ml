@@ -1,13 +1,14 @@
-open Lwt
 open Cohttp_lwt_unix
 open Soup
 open Printf
 open Re
 
+let (>>=), (>|=) = Lwt.((>>=), (>|=))
+
 let initial_page = "https://www.hekaoy.fi/fi/asunnot/kohteet"
 let root_page = "https://www.hekaoy.fi"
 
-let debug = true
+let debug = false
 
 (** Single page, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet?page=3 *)
 type pagination_crawl_result =
@@ -21,14 +22,6 @@ type int_or_int_range = Uniform of int | MinMax of int * int
 (** Some houses list floor count as range, e.g. 3-4 *)
 type floor_count = int_or_int_range
 
-(** Single house building, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet/hilda-flodinin-kuja-2 *)
-type parsed_house =
-  { build_year  : int;
-    floor_count : floor_count;
-    identifier  : int;
-    district    : string;
-  }
-
 type apartment_size = Same of float | Varying of float * float
 
 type rent = int_or_int_range
@@ -40,6 +33,21 @@ type apartment =
     count          : int;
     rent           : rent;
   }
+
+(** Single house building, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet/hilda-flodinin-kuja-2 *)
+type parsed_house =
+  { build_year      : int option;
+    floor_count     : floor_count option;
+    identifier      : int;
+    district        : string option;
+    apartment_table : apartment list;
+  }
+
+let cat_maybes (options : 'a option list) : 'a list =
+  let is_some a = match a with Some _ -> true | None -> false in
+  let unwrap_option a = match a with Some t -> t | None -> failwith "bruh" in
+  let not_none = List.filter is_some options in
+  List.map unwrap_option not_none
 
 (*
 First remove whitespace, then parse the min/max pair:
@@ -62,7 +70,7 @@ let parse_floor_text (text : string) : floor_count option =
       | Some e -> Some (Uniform e))
     | _ -> None
 
-(* Pervasives.float_of_string only parses floats with dot*)
+(* Pervasives.float_of_string only parses floats with dot *)
 let float_of_string_finnish_opt (text : string) : float option =
   let comma = Pcre.regexp "," in
   let sub _ = "." in
@@ -81,47 +89,64 @@ let parse_apartment_sizes (text : string) : apartment_size option =
 
   match groups with
     | Some [| _; minimum; maximum|] ->
-        Some (Varying (float_of_string_finnish minimum, float_of_string_finnish maximum))
+        Some (Varying (float_of_string_finnish minimum,
+                       float_of_string_finnish maximum))
     | _ -> (match float_of_string_finnish_opt text with
         None -> failwith (sprintf "text: %s\n" text)
       | Some e -> Some (Same e))
 
-let parse_apartment_table_row (n : element node) : apartment =
-  let cells = select "td" n in
+type table_row_result =
+  ApartmentError of string (* Unexpected row *)
+| Anomaly of string (* Weird row which should be skipped *)
+| Success of apartment
+
+let parse_apartment_count (text : string) : int option =
+  match int_of_string_opt text with
+    Some num -> Some num
+  | None ->
+      let re = Pcre.regexp "(\\d+) kpl" in
+      let groups = try Some (Pcre.extract ~rex:re text) with
+      Not_found -> None in
+      match groups with
+        Some [|_; count |] -> Some (int_of_string (String.trim count))
+        | _ -> None
+
+
+let parse_apartment_table_row (el : element node) : table_row_result =
+  let cells = select "td" el in
   match to_list cells with
-      [typ; sizes_text; count_text; raw_rent] -> begin
-        let residence_type = match leaf_text typ with
-            Some t -> t
-          | None -> failwith "unexpected empty table cell" in
-        let count = match leaf_text count_text with
-            Some tee -> begin
-              match int_of_string_opt (String.trim tee) with
-                  Some t -> t
-                | None -> failwith "non int apartment count"
-              end
-          | None -> failwith "unexpected " in
+    [typ; sizes_text; count_text; raw_rent] -> begin
+      match leaf_text typ with
+        None -> ApartmentError "empty apartment type"
+      | Some residence_type ->
+          match leaf_text count_text with
+            None -> ApartmentError "unexpected empty count"
+          | Some count_contents ->
+              match parse_apartment_count count_contents with
+                None ->
+                  Anomaly (sprintf "non int apartment count: '%s'" count_contents)
+              | Some count ->
+                  match leaf_text sizes_text with
+                    None -> ApartmentError "apartment sizes cell is empty"
+                  | Some sizes_raw ->
+                      match parse_apartment_sizes sizes_raw with
+                        None -> ApartmentError "cannot parse apartment"
+                      | Some sizes ->
+                        match leaf_text raw_rent with
+                          None -> ApartmentError "empty rent cell"
+                        | Some parsed_rent ->
+                            match parse_floor_text parsed_rent with
+                              None -> failwith "cannot parse rent"
+                            | Some rent ->
+                                Success { residence_type;
+                                          sizes;
+                                          count;
+                                          rent
+                                }
+      end
+  | _ -> ApartmentError "unexpected column count"
 
-        let sizes_raw = match leaf_text sizes_text with
-            None -> failwith "apartment sizes cell is empty"
-          | Some t -> t in
-        let sizes = match parse_apartment_sizes sizes_raw with
-            None -> failwith "cannot parse apartment"
-          | Some s -> s in
-        let parsed_rent = match leaf_text raw_rent with
-            None -> failwith "empty rent cell"
-          | Some t -> t in
-        let rent = match parse_floor_text parsed_rent with
-            None -> failwith "cannot parse rent"
-          | Some t -> t in
-        { residence_type;
-          sizes;
-          count;
-          rent
-        }
-        end
-    | _ -> failwith "unexpected column count"
-
-let parse_apartment_table (html : soup node) : apartment list =
+let parse_apartment_table (html : soup node) : table_row_result list =
   let rows = select ".asuntojakauma-container tbody tr" html in
   List.map parse_apartment_table_row (to_list rows)
 
@@ -150,32 +175,43 @@ let fetch_links (url : string) : pagination_crawl_result Lwt.t =
   }
 
 (** Extract house links from all pages, until no more pages are left. *)
-let rec crawl_all_pages (url : string) : string list =
+let rec crawl_all_pages (url : string) : string list Lwt.t =
   (* TODO remove Lwt_main.run *)
-  let result = Lwt_main.run (fetch_links url) in
+  printf "crawling page %s\n" url;
+  fetch_links url >>= fun result ->
+  let { house_links; next_page } = result in
 
-  match result.next_page with
-      None -> result.house_links
-    | Some next_page -> if debug
-                        then result.house_links
-                        else result.house_links @ crawl_all_pages next_page
+  match next_page with
+      None -> house_links
+    | Some next -> if debug
+                   then house_links
+                   else house_links @ crawl_all_pages next
 
-let find_string (html : soup node) (selector : string) : string =
+let find_string (page : string) (html : soup node) (selector : string) : string =
   match select_one selector html with
-      None -> failwith (sprintf "can't find element from DOM with %s" selector)
+      None -> failwith (sprintf "can't find element from DOM with %s from page %s" selector page)
     | Some e -> match leaf_text e with
         None -> failwith (sprintf "cannot find string text from %s" selector)
       | Some t -> t
 
-let find_integer_opt html selector =
-  let text = find_string html selector in
+let find_integer_opt page html selector =
+  let text = find_string page html selector in
   int_of_string_opt text
 
-let find_integer html selector =
-  let text = find_integer_opt html selector in
+let find_integer page html selector =
+  let text = find_integer_opt page html selector in
   match text with
       None -> failwith (sprintf "cannot parse int from selector %s" selector)
     | Some t -> t
+
+
+(* There's like one housing with build year 1950-1951. Lets ignore that... *)
+let find_year url html =
+  let year = find_string url html ".field--name-field-year-built .field__item" in
+  let re = Pcre.regexp "(\\d{4} ?- ?\\d{4}|\\d{4}/\\d{2}|\\d{4} ?, ?\\d{4}|\\d{4} ja \\d{4})" in
+  match int_of_string_opt year with
+    None -> if Pcre.pmatch ~rex:re year then None else failwith (sprintf "unexpected build year %s" year)
+  | Some y -> Some y
 
 (** Floor count CSS classes are misleading: either one of these two is used.
 The text content might look something like "4 - 6" *)
@@ -189,37 +225,83 @@ let parse_floor_count (html : soup node) : floor_count option =
   match element with
       None -> None
     | Some e -> match leaf_text e with
-        None -> None
+        None -> failwith "couldnt find floor count text"
       | Some t -> parse_floor_text t
 
-let fetch_house (url : string) : parsed_house Lwt.t =
-  printf "parsing for url %s\n" url;
+let detect_page_under_construction (html : soup node) : bool =
+  let gallery_container = select_one "div.field--name-field-image" html in
+  match gallery_container with
+    None -> true
+    | Some _ -> false
+
+let fetch_house (url : string) : parsed_house option Lwt.t =
   Client.get (Uri.of_string url) >>= fun (_, body) ->
   body |> Cohttp_lwt.Body.to_string >|= fun body ->
   let html = parse body in
-  let css_string = find_string html in
-  let css_int = find_integer html in
-  let build_year = css_int ".field--name-field-year-built .field__item" in
-  let district = css_string ".field--name-field-district .field__item" in
-  let iden = css_int ".field--name-field-vmy-number .field__item" in
 
-  let table = parse_apartment_table html in
+  if detect_page_under_construction html then begin
+    printf "warning: detected page %s as under construction\n" url;
+    None
+  end
+  else
+    let css_int = find_integer url html in
+    let build_year = find_year url html in
+    let district = match select_one ".field--name-field-district .field__item" html with
+      None -> None
+    | Some t -> match leaf_text t with
+        None -> None
+      | Some v -> Some v in
+    let iden = css_int ".field--name-field-vmy-number .field__item" in
 
-  List.iter (fun a -> printf "val: %s\n" a.residence_type) table;
+    let err_print_table ap = match ap with
+      Success table -> Some table
+    | Anomaly reason -> printf "weird apartment row skipped at %s: %s\n" url reason; None
+    | ApartmentError reason -> failwith (sprintf "failed to parse table for %s: %s" url reason) in
 
-  let floor_count = match parse_floor_count html with
-      None -> failwith (sprintf "cannot parse floor count for %s" url)
-    | Some t -> t in
+    let apartment_table = List.filter_map err_print_table (parse_apartment_table html) in
 
-  { build_year;
-    floor_count = floor_count;
-    district = district;
-    identifier = iden;
-  }
+    let floor_count = parse_floor_count html in
+
+    Some { build_year;
+      floor_count;
+      apartment_table;
+      district;
+      identifier = iden;
+    }
+
+let string_of_apartment_size (ap : apartment_size) : (string * string * string) =
+  match ap with
+      Same t -> (string_of_float t, "", "")
+    | Varying(left, right) -> ("", string_of_float left, string_of_float right)
+
+let string_of_int_range (range : int_or_int_range) : (string * string * string) =
+  match range with
+      Uniform u -> (string_of_int u, "", "")
+    | MinMax(min, max) -> ("", string_of_int min, string_of_int max)
+
+let serialize_houses (houses : parsed_house list) : string list list =
+  let to_row (house : parsed_house) =
+    List.map (fun (apartment : apartment) ->
+      let { residence_type; sizes; count; rent } = apartment in
+      let rent_exact, rent_min, rent_max = string_of_int_range rent in
+      let uniform_size, min_size, max_size = string_of_apartment_size sizes in
+      [ residence_type;
+        uniform_size;
+        min_size;
+        max_size;
+        string_of_int count;
+        rent_exact;
+        rent_min;
+        rent_max
+      ]
+    ) house.apartment_table in
+
+  let apartments = List.map to_row houses in
+  List.flatten apartments
 
 let run () =
   let house_links = crawl_all_pages initial_page in
-
-  (* fetch all houses in single page concurrently ! *)
-  let houses = Lwt_main.run (Lwt_list.map_p fetch_house house_links) in
-  printf "%d\n" (List.length houses);
+  let houses = Lwt_main.run (Lwt_list.map_s fetch_house house_links) in
+  let file = "out.csv" in
+  Csv.save file (serialize_houses (cat_maybes houses));
+  printf "output written to %s\n" file

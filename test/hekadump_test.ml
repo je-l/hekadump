@@ -18,13 +18,23 @@ let test_min_max_rent () =
         Alcotest.(check int) "min rent" 1100 l;
     | Some (Hekadump.Uniform(_)) | None -> Alcotest.fail "cannot parse rent"
 
+let test_apartment_count () =
+  (match Hekadump.parse_apartment_count "12 kpl" with
+    Some l -> Alcotest.(check int) "legit apartment count" 12 l
+  | None -> Alcotest.fail "cannot parse legit apt count");
+  match Hekadump.parse_apartment_count "öööö" with
+    Some _ -> Alcotest.fail "should not parse odd apt count"
+    | None -> ()
+
+
 let () =
   Alcotest.run "Hekadump"
     [
       ( "regex parsing",
         [Alcotest.test_case "uniform floors" `Quick test_uniform_floor_count;
         Alcotest.test_case "minmax floors" `Quick test_min_max_floor_count;
-        Alcotest.test_case "minmax rent" `Quick test_min_max_rent
+        Alcotest.test_case "minmax rent" `Quick test_min_max_rent;
+        Alcotest.test_case "apartment count" `Quick test_apartment_count
         ]
       )
     ]
