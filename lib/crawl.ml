@@ -3,170 +3,18 @@ open Soup
 open Printf
 open Re
 
+open Parse
+
 let (>>=), (>|=), return = Lwt.((>>=), (>|=), return)
 
-let initial_page = "https://www.hekaoy.fi/fi/asunnot/kohteet"
-let root_page = "https://www.hekaoy.fi"
-
+(* debug = only fetching the first page of houses *)
 let debug = false
-
-(** Single page, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet?page=3 *)
-type pagination_crawl_result =
-  { house_links : string list;
-    next_page   : string option;
-  }
-
-type int_or_int_range = Uniform of int | MinMax of int * int
-
-
-(** Some houses list floor count as range, e.g. 3-4 *)
-type floor_count = int_or_int_range
-
-type apartment_size = Same of float | Varying of float * float
-
-type rent = int_or_int_range
-
-(** Single row in the apartment "asuntojakauma" table *)
-type apartment =
-  { residence_type : string;
-    sizes          : apartment_size;
-    count          : int;
-    rent           : rent;
-  }
-
-(** Single house building, e.g.
-https://www.hekaoy.fi/fi/asunnot/kohteet/hilda-flodinin-kuja-2 *)
-type parsed_house =
-  { build_year      : int option;
-    floor_count     : floor_count option;
-    identifier      : int;
-    district        : string option;
-    apartment_table : apartment list;
-  }
 
 let cat_maybes (options : 'a option list) : 'a list =
   let is_some a = match a with Some _ -> true | None -> false in
   let unwrap_option a = match a with Some t -> t | None -> failwith "bruh" in
   let not_none = List.filter is_some options in
   List.map unwrap_option not_none
-
-(*
-First remove whitespace, then parse the min/max pair:
-
-1 100 - 1 200 --> 1100-1200 --> [| 1100-1200; 1100; 1200|]
-*)
-let parse_floor_text (text : string) : floor_count option =
-  let whitespace = Pcre.regexp "\\s+" in
-  let sub _ = "" in
-  let cleaned_text = Pcre.substitute ~rex:whitespace ~subst:sub text in
-  let regex = Pcre.regexp "(\\d+)(?:–|-)(\\d+)" in
-  let groups = try Some (Pcre.extract ~rex:regex cleaned_text)
-    with Not_found -> None in
-
-  match groups with
-    | Some [| _; left; right|] ->
-        Some (MinMax (int_of_string left, int_of_string right))
-    | None -> (match int_of_string_opt cleaned_text with
-        None -> None
-      | Some e -> Some (Uniform e))
-    | _ -> None
-
-(* Pervasives.float_of_string only parses floats with dot *)
-let float_of_string_finnish_opt (text : string) : float option =
-  let comma = Pcre.regexp "," in
-  let sub _ = "." in
-  let replaced = Pcre.substitute ~rex:comma ~subst:sub text in
-  float_of_string_opt replaced
-
-let float_of_string_finnish (text : string) : float =
-  match float_of_string_finnish_opt text with
-      None -> failwith (sprintf "cannot parse: %s\n" text)
-    | Some t -> t
-
-let parse_apartment_sizes (text : string) : apartment_size option =
-  let regex = Pcre.regexp "(\\d+,\\d+) - (\\d+,\\d+)" in
-  let groups = try Some (Pcre.extract ~rex:regex text)
-    with Not_found -> None in
-
-  match groups with
-    | Some [| _; minimum; maximum|] ->
-        Some (Varying (float_of_string_finnish minimum,
-                       float_of_string_finnish maximum))
-    | _ -> (match float_of_string_finnish_opt text with
-        None -> failwith (sprintf "text: %s\n" text)
-      | Some e -> Some (Same e))
-
-type table_row_result =
-  ApartmentError of string (* Unexpected row *)
-| Anomaly of string (* Weird row which should be skipped *)
-| Success of apartment
-
-let parse_apartment_count (text : string) : int option =
-  match int_of_string_opt text with
-    Some num -> Some num
-  | None ->
-      let re = Pcre.regexp "(\\d+) kpl" in
-      let groups = try Some (Pcre.extract ~rex:re text) with
-      Not_found -> None in
-      match groups with
-        Some [|_; count |] -> Some (int_of_string (String.trim count))
-        | _ -> None
-
-let parse_apartment_table_row (el : element node) : table_row_result =
-  let cells = select "td" el in
-  match to_list cells with
-    [typ; sizes_text; count_text; raw_rent] -> begin
-      match leaf_text typ with
-        None -> ApartmentError "empty apartment type"
-      | Some residence_type ->
-          match leaf_text count_text with
-            None -> ApartmentError "unexpected empty count"
-          | Some count_contents ->
-              match parse_apartment_count count_contents with
-                None ->
-                  Anomaly (sprintf
-                    "non int apartment count: '%s'"
-                    count_contents)
-              | Some count ->
-                  match leaf_text sizes_text with
-                    None -> ApartmentError "apartment sizes cell is empty"
-                  | Some sizes_raw ->
-                      match parse_apartment_sizes sizes_raw with
-                        None -> ApartmentError "cannot parse apartment"
-                      | Some sizes ->
-                        match leaf_text raw_rent with
-                          None -> ApartmentError "empty rent cell"
-                        | Some parsed_rent ->
-                            match parse_floor_text parsed_rent with
-                              None -> failwith "cannot parse rent"
-                            | Some rent ->
-                                Success { residence_type;
-                                          sizes;
-                                          count;
-                                          rent
-                                }
-      end
-  | _ -> ApartmentError "unexpected column count"
-
-let parse_apartment_table (html : soup node) : table_row_result list =
-  let rows = select ".asuntojakauma-container tbody tr" html in
-  List.map parse_apartment_table_row (to_list rows)
-
-let parse_next_page (html : soup node) : string option =
-  match select_one ".pager__item--next a" html with
-      None -> None
-    | Some el -> match attribute "href" el with
-        None -> None
-      | Some link -> Some (initial_page ^ link)
-
-let parse_page_houses (html : soup node) : string list =
-  let link_elements = select ".node--type-kiinteisto h4 a" html in
-  let maybe_links = List.map (attribute "href") (to_list link_elements) in
-  let unsafe_filter el = match el with
-      Some a -> a
-    | None -> failwith "link without href! CSS selector is faulty" in
-  let links = List.map unsafe_filter maybe_links in
-  List.map (fun e -> root_page ^ e) links
 
 let http_get (url : string) : string Lwt.t =
   Client.get (Uri.of_string url) >>= fun (_, body) ->
@@ -214,8 +62,8 @@ let find_integer page html selector =
       None -> failwith (sprintf "cannot parse int from selector %s" selector)
     | Some t -> t
 
-
-(* There's like one housing with build year 1950-1951. Lets ignore that... *)
+(* There are few housings with build years like "1950-1960". Skip those for now.
+TODO: parse the starting year or compute average? *)
 let find_year url html =
   let year = find_string
     url

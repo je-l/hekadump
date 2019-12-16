@@ -1,28 +1,30 @@
+open Hekadump.Parse
+
 let test_uniform_floor_count () =
-  match Hekadump.parse_floor_text "123" with
-    | Some (Hekadump.Uniform t) -> Alcotest.(check int) "floor count" 123 t
-    | Some (Hekadump.MinMax(_, _)) | None -> Alcotest.fail "unable to parse"
+  match parse_floor_text "123" with
+    | Some (Uniform t) -> Alcotest.(check int) "floor count" 123 t
+    | Some (MinMax(_, _)) | None -> Alcotest.fail "unable to parse"
 
 let test_min_max_floor_count () =
-  match Hekadump.parse_floor_text "4 – 7" with
-    | Some (Hekadump.MinMax (l, r)) ->
+  match parse_floor_text "4 – 7" with
+    | Some (MinMax (l, r)) ->
         Alcotest.(check int) "max floor" 7 r;
         Alcotest.(check int) "min floor" 4 l;
-    | Some (Hekadump.Uniform(_)) -> Alcotest.fail "invalid uniform"
+    | Some (Uniform(_)) -> Alcotest.fail "invalid uniform"
     | None -> Alcotest.fail "unable to parse minmax"
 
 let test_min_max_rent () =
-  match Hekadump.parse_floor_text "1 100 - 1 200" with
-    | Some (Hekadump.MinMax (l, r)) ->
+  match parse_floor_text "1 100 - 1 200" with
+    | Some (MinMax (l, r)) ->
         Alcotest.(check int) "max rent" 1200 r;
         Alcotest.(check int) "min rent" 1100 l;
-    | Some (Hekadump.Uniform(_)) | None -> Alcotest.fail "cannot parse rent"
+    | Some (Uniform(_)) | None -> Alcotest.fail "cannot parse rent"
 
 let test_apartment_count () =
-  (match Hekadump.parse_apartment_count "12 kpl" with
+  (match parse_apartment_count "12 kpl" with
     Some l -> Alcotest.(check int) "legit apartment count" 12 l
   | None -> Alcotest.fail "cannot parse legit apt count");
-  match Hekadump.parse_apartment_count "öööö" with
+  match parse_apartment_count "öööö" with
     Some _ -> Alcotest.fail "should not parse odd apt count"
     | None -> ()
 
