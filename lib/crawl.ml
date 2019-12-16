@@ -10,19 +10,17 @@ let (>>=), (>|=), return = Lwt.((>>=), (>|=), return)
 (* debug = only fetching the first page of houses *)
 let debug = false
 
-let cat_maybes (options : 'a option list) : 'a list =
-  let is_some a = match a with Some _ -> true | None -> false in
-  let unwrap_option a = match a with Some t -> t | None -> failwith "bruh" in
-  let not_none = List.filter is_some options in
-  List.map unwrap_option not_none
+let output_file = "heka_crawl.csv"
 
-let http_get (url : string) : string Lwt.t =
+let cat_maybes (options : 'a option list) : 'a list =
+  List.filter_map (fun a -> a) options
+
+let http_get (url : string) : soup node Lwt.t =
   Client.get (Uri.of_string url) >>= fun (_, body) ->
-  body |> Cohttp_lwt.Body.to_string >|= fun body -> body
+  body |> Cohttp_lwt.Body.to_string >|= fun body -> parse body
 
 let fetch_links (url : string) : pagination_crawl_result Lwt.t =
-  http_get url >|= fun body ->
-  let html = parse body in
+  http_get url >|= fun html ->
   { house_links = parse_page_houses html;
     next_page = parse_next_page html
   }
@@ -103,9 +101,15 @@ let detect_page_under_construction (html : soup node) : bool =
     None -> true
     | Some _ -> false
 
+let find_district html =
+  match select_one ".field--name-field-district .field__item" html with
+    None -> None
+  | Some t -> match leaf_text t with
+      None -> None
+    | Some v -> Some v
+
 let fetch_house (url : string) : parsed_house option Lwt.t =
-  http_get url >>= fun body ->
-  let html = parse body in
+  http_get url >>= fun html ->
 
   if detect_page_under_construction html then
     Lwt_io.printlf "warning: detected page %s as under construction" url >|=
@@ -113,14 +117,8 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
   else
     let css_int = find_integer url html in
     let build_year = find_year url html in
-    let district = match select_one
-      ".field--name-field-district .field__item"
-      html with
-        None -> None
-      | Some t -> match leaf_text t with
-          None -> None
-        | Some v -> Some v in
-      let iden = css_int ".field--name-field-vmy-number .field__item" in
+    let district = find_district html in
+    let identifier = css_int ".field--name-field-vmy-number .field__item" in
 
     let err_print_table ap = match ap with
       Success table -> return @@ Some table
@@ -139,7 +137,7 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
       floor_count;
       apartment_table;
       district;
-      identifier = iden;
+      identifier;
     }
 
 let string_of_size (ap : apartment_size) : (string * string * string) =
@@ -179,8 +177,7 @@ let main : unit Lwt.t =
     "crawling %d house pages..."
     (List.length house_links) >>= fun () ->
       Lwt_list.map_s fetch_house house_links >>= fun houses ->
-      let file = "out.csv" in
-      Csv.save file (serialize_houses (cat_maybes houses));
-      Lwt_io.printlf "output written to %s" file
+      Csv.save output_file (serialize_houses (cat_maybes houses));
+      Lwt_io.printlf "output written to %s" output_file
 
 let run () = Lwt_main.run main
