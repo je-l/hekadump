@@ -12,6 +12,17 @@ let debug = false
 
 let output_file = "heka_crawl.csv"
 
+let columns =
+  [ "residence_type";
+    "apartment_size_exact";
+    "apartment_size_minimum";
+    "apartment_size_maximum";
+    "apartment_count";
+    "rent_exact";
+    "rent_minimum";
+    "rent_maximum";
+  ]
+
 let cat_maybes (options : 'a option list) : 'a list =
   List.filter_map (fun a -> a) options
 
@@ -153,8 +164,8 @@ let string_of_int_range
 
 let serialize_houses (houses : parsed_house list) : string list list =
   let to_row (house : parsed_house) =
-    List.map (fun (apartment : apartment) ->
-      let { residence_type; sizes; count; rent } = apartment in
+    let apartment_list apt =
+      let { residence_type; sizes; count; rent } = apt in
       let rent_exact, rent_min, rent_max = string_of_int_range rent in
       let uniform_size, min_size, max_size = string_of_size sizes in
       [ residence_type;
@@ -165,8 +176,8 @@ let serialize_houses (houses : parsed_house list) : string list list =
         rent_exact;
         rent_min;
         rent_max
-      ]
-    ) house.apartment_table in
+      ] in
+    List.map apartment_list house.apartment_table in
 
   let apartments = List.map to_row houses in
   List.flatten apartments
@@ -177,7 +188,8 @@ let main : unit Lwt.t =
     "crawling %d house pages..."
     (List.length house_links) >>= fun () ->
       Lwt_list.map_s fetch_house house_links >>= fun houses ->
-      Csv.save output_file (serialize_houses (cat_maybes houses));
+      let all_rows = columns :: serialize_houses (cat_maybes houses) in
+      Csv.save output_file all_rows;
       Lwt_io.printlf "output written to %s" output_file
 
 let run () = Lwt_main.run main
