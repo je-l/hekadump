@@ -36,9 +36,10 @@ dune exec hekadump.exe
 | rent (exact) | | rent if it's same for every apartment of this type |
 | rent (minimum) | | maximum rent if the apartments have variable rent |
 | rent (maximum) | | |
-| build year | x | |
-| floor count (exact) | x | |
-| floor count (minimum) | x | Some houses have floor count like "4-6" |
-| floor count (maximum) | x | |
+| build year | | |
+| floor count (exact) | | |
+| floor count (minimum) | | Some houses have floor count like "4-6" |
+| floor count (maximum) | | |
 | identifier | x | Labeled as "kohteen tunnus" in the pages |
 | district | x | "kaupunginosa" |
+| url | x | |

@@ -36,6 +36,7 @@ type parsed_house =
     identifier      : int;
     district        : string option;
     apartment_table : apartment list;
+    url             : string;
   }
 
 (* Pervasives.float_of_string only parses floats with dot *)

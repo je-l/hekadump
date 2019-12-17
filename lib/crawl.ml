@@ -26,7 +26,8 @@ let columns =
     "floor_count_minimum";
     "floor_count_maximum";
     "identifier";
-    "district"
+    "district";
+    "url"
   ]
 
 let cat_maybes (options : 'a option list) : 'a list =
@@ -155,6 +156,7 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
       apartment_table;
       district;
       identifier;
+      url;
     }
 
 let string_of_size (ap : apartment_size) : (string * string * string) =
@@ -172,7 +174,13 @@ let string_of_opt_int n = match n with Some t -> string_of_int t | None -> ""
 
 let serialize_houses (houses : parsed_house list) : string list list =
   let to_row (house : parsed_house) =
-  let { build_year; floor_count; identifier; district; apartment_table } = house in
+  let { build_year;
+        floor_count;
+        identifier;
+        district;
+        apartment_table;
+        url
+      } = house in
 
     let apartment_list apt =
       let { residence_type; sizes; count; rent } = apt in
@@ -195,7 +203,8 @@ let serialize_houses (houses : parsed_house list) : string list list =
         floors_min;
         floors_max;
         string_of_int identifier;
-        match district with Some d -> d | None -> "";
+        (match district with Some d -> d | None -> "");
+        url;
       ] in
     List.map apartment_list apartment_table in
 
