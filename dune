@@ -1,4 +1,5 @@
 (executable
+ (public_name hekadump.exe)
  (name main)
  (libraries hekadump))
 

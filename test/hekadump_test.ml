@@ -28,7 +28,6 @@ let test_apartment_count () =
     Some _ -> Alcotest.fail "should not parse odd apt count"
     | None -> ()
 
-
 let () =
   Alcotest.run "Hekadump"
     [

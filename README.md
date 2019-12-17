@@ -1,5 +1,7 @@
 # Crawl Heka apartment listings
 
+Program for crawling [Heka apartment listing](https://www.hekaoy.fi/fi/asunnot/kohteet) into csv format
+
 ### Development
 
 Tested with OCaml 4.09.0 and dune 2.0.0
@@ -19,7 +21,7 @@ dune build
 Run the program:
 
 ```
-./_build/default/main.exe
+dune exec hekadump.exe
 ```
 
 ### Output format
@@ -27,14 +29,16 @@ Run the program:
 | column | required | description |
 | ------ | -------- | ----------- |
 | apartment type | x | e.g. "1h + k" |
-| apartment size (exact) | | This is found if all apartments have same size |
-| apartment size (minimum) | | Minimum apartment size if there are multiple |
+| apartment size (exact) | | this is found if all apartments have same size |
+| apartment size (minimum) | | minimum apartment size if there are multiple |
 | apartment size (maximum) | | |
-| apartment count | x | how many similar apartments are there |
+| apartment count | x | count for similar apartments in the building |
 | rent (exact) | | rent if it's same for every apartment of this type |
 | rent (minimum) | | maximum rent if the apartments have variable rent |
 | rent (maximum) | | |
 | build year | x | |
-| floor count | x | |
+| floor count (exact) | x | |
+| floor count (minimum) | x | Some houses have floor count like "4-6" |
+| floor count (maximum) | x | |
 | identifier | x | Labeled as "kohteen tunnus" in the pages |
 | district | x | "kaupunginosa" |

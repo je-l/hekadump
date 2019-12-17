@@ -21,6 +21,12 @@ let columns =
     "rent_exact";
     "rent_minimum";
     "rent_maximum";
+    "build_year";
+    "floor_count_exact";
+    "floor_count_minimum";
+    "floor_count_maximum";
+    "identifier";
+    "district"
   ]
 
 let cat_maybes (options : 'a option list) : 'a list =
@@ -162,11 +168,19 @@ let string_of_int_range
         Uniform u -> (string_of_int u, "", "")
       | MinMax(min, max) -> ("", string_of_int min, string_of_int max)
 
+let string_of_opt_int n = match n with Some t -> string_of_int t | None -> ""
+
 let serialize_houses (houses : parsed_house list) : string list list =
   let to_row (house : parsed_house) =
+  let { build_year; floor_count; identifier; district; apartment_table } = house in
+
     let apartment_list apt =
       let { residence_type; sizes; count; rent } = apt in
       let rent_exact, rent_min, rent_max = string_of_int_range rent in
+      let floors_exact, floors_min, floors_max = match floor_count with
+        Some f -> string_of_int_range f
+      | None -> "", "", "" in
+
       let uniform_size, min_size, max_size = string_of_size sizes in
       [ residence_type;
         uniform_size;
@@ -175,9 +189,15 @@ let serialize_houses (houses : parsed_house list) : string list list =
         string_of_int count;
         rent_exact;
         rent_min;
-        rent_max
+        rent_max;
+        string_of_opt_int build_year;
+        floors_exact;
+        floors_min;
+        floors_max;
+        string_of_int identifier;
+        match district with Some d -> d | None -> "";
       ] in
-    List.map apartment_list house.apartment_table in
+    List.map apartment_list apartment_table in
 
   let apartments = List.map to_row houses in
   List.flatten apartments
