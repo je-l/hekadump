@@ -28,6 +28,18 @@ let test_apartment_count () =
     Some _ -> Alcotest.fail "should not parse odd apt count"
     | None -> ()
 
+let test_year_parse_normal () =
+  match parse_build_year "1950" with
+    None -> Alcotest.fail "cannot parse valid build year"
+    | Some y -> Alcotest.(check int) "parsing normal build year" 1950 y
+
+(* year parsing should only result in None for certain weird labels, not for
+all unexpected inputs *)
+let test_year_parse_invalid () =
+  match parse_build_year "1950 ja 1970" with
+    None -> ()
+    | Some _ -> Alcotest.fail "should not parse year range"
+
 let () =
   Alcotest.run "Hekadump"
     [
@@ -35,7 +47,9 @@ let () =
         [Alcotest.test_case "uniform floors" `Quick test_uniform_floor_count;
         Alcotest.test_case "minmax floors" `Quick test_min_max_floor_count;
         Alcotest.test_case "minmax rent" `Quick test_min_max_rent;
-        Alcotest.test_case "apartment count" `Quick test_apartment_count
+        Alcotest.test_case "apartment count" `Quick test_apartment_count;
+        Alcotest.test_case "parsing year" `Quick test_year_parse_normal;
+        Alcotest.test_case "year range parsing" `Quick test_year_parse_normal
         ]
       )
     ]

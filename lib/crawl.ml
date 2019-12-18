@@ -1,7 +1,6 @@
 open Cohttp_lwt_unix
 open Soup
 open Printf
-open Re
 
 open Parse
 
@@ -85,13 +84,7 @@ let find_year url html =
     url
     html
     ".field--name-field-year-built .field__item" in
-  let re = Pcre.regexp
-    "(\\d{4} ?- ?\\d{4}|\\d{4}/\\d{2}|\\d{4} ?, ?\\d{4}|\\d{4} ja \\d{4})" in
-  match int_of_string_opt year with
-    None ->
-      if Pcre.pmatch ~rex:re year
-      then None else failwith (sprintf "unexpected build year %s" year)
-  | Some y -> Some y
+  parse_build_year year
 
 (** Floor count CSS classes are misleading: either one of these two is used.
 The text content might look something like "4 - 6" *)

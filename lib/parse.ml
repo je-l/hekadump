@@ -156,3 +156,12 @@ let parse_page_houses (html : soup node) : string list =
     | None -> failwith "link without href! CSS selector is faulty" in
   let links = List.map unsafe_filter maybe_links in
   List.map (fun e -> root_page ^ e) links
+
+let parse_build_year (text : string) : int option =
+  let re = Pcre.regexp
+    "(\\d{4} ?- ?\\d{4}|\\d{4}/\\d{2}|\\d{4} ?, ?\\d{4}|\\d{4} ja \\d{4})" in
+  match int_of_string_opt text with
+    None ->
+      if Pcre.pmatch ~rex:re text
+      then None else failwith (sprintf "unexpected build year %s" text)
+  | Some y -> Some y

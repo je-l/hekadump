@@ -38,8 +38,8 @@ dune exec hekadump.exe
 | rent (maximum) | | |
 | build year | | |
 | floor count (exact) | | |
-| floor count (minimum) | | Some houses have floor count like "4-6" |
+| floor count (minimum) | | some houses have floor count like "4-6" |
 | floor count (maximum) | | |
-| identifier | x | Labeled as "kohteen tunnus" in the pages |
+| identifier | x | labeled as "kohteen tunnus" in the pages |
 | district | x | "kaupunginosa" |
 | url | x | |
