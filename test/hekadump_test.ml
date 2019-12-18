@@ -48,8 +48,8 @@ let () =
         Alcotest.test_case "minmax floors" `Quick test_min_max_floor_count;
         Alcotest.test_case "minmax rent" `Quick test_min_max_rent;
         Alcotest.test_case "apartment count" `Quick test_apartment_count;
-        Alcotest.test_case "parsing year" `Quick test_year_parse_normal;
-        Alcotest.test_case "year range parsing" `Quick test_year_parse_normal
+        Alcotest.test_case "regular year parsing" `Quick test_year_parse_normal;
+        Alcotest.test_case "year range parsing" `Quick test_year_parse_invalid
         ]
       )
     ]

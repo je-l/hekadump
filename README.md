@@ -6,6 +6,12 @@ Program for crawling [Heka apartment listing](https://www.hekaoy.fi/fi/asunnot/k
 
 Tested with OCaml 4.09.0 and dune 2.0.0
 
+Inspect missing dependencies and install them:
+
+```sh
+dune external-lib-deps --missing @@default
+```
+
 Run unit tests:
 
 ```sh
