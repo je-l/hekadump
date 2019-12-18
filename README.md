@@ -40,7 +40,7 @@ dune exec hekadump.exe
 | apartment size (maximum) | | |
 | apartment count | x | count for similar apartments in the building |
 | rent (exact) | | rent if it's same for every apartment of this type |
-| rent (minimum) | | maximum rent if the apartments have variable rent |
+| rent (minimum) | | minimum rent if the apartments have variable rent |
 | rent (maximum) | | |
 | build year | | |
 | floor count (exact) | | |
