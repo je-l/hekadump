@@ -1,6 +1,8 @@
 # Crawl Heka apartment listings
 
-Program for crawling [Heka apartment listing](https://www.hekaoy.fi/fi/asunnot/kohteet) into csv format
+Program for crawling [Heka apartment listing](https://www.hekaoy.fi/fi/asunnot/kohteet) into csv format.
+
+Download dump directly from [Github action artifacts](https://github.com/je-l/hekadump/actions?query=is%3Asuccess). New dump is generated daily.
 
 ### Development
 
