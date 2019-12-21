@@ -7,7 +7,7 @@ open Parse
 let (>>=), (>|=), return = Lwt.((>>=), (>|=), return)
 
 (* debug = only fetching the first page of houses *)
-let debug = false
+let debug = true
 
 let output_file = "heka_crawl.csv"
 

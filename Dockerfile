@@ -11,4 +11,4 @@ WORKDIR /home/opam/app
 
 RUN dune build
 
-CMD ["dune", "exec", "hekadump.exe"]
+CMD ["./script/release.sh"]
