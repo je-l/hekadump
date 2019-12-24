@@ -12,7 +12,8 @@ let debug = false
 let output_file = "heka_crawl.csv"
 
 let columns =
-  [ "residence_type";
+  [ "address";
+    "residence_type";
     "apartment_size_exact";
     "apartment_size_minimum";
     "apartment_size_maximum";
@@ -130,6 +131,7 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
     let build_year = find_year url html in
     let district = find_district html in
     let identifier = css_int ".field--name-field-vmy-number .field__item" in
+    let address = find_string url html "div.kiinteiston-nimi span" in
 
     let err_print_table ap = match ap with
       Success table -> return @@ Some table
@@ -150,6 +152,7 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
       district;
       identifier;
       url;
+      address;
     }
 
 let string_of_size (ap : apartment_size) : (string * string * string) =
@@ -172,7 +175,8 @@ let serialize_houses (houses : parsed_house list) : string list list =
         identifier;
         district;
         apartment_table;
-        url
+        url;
+        address;
       } = house in
 
     let apartment_list apt =
@@ -183,7 +187,8 @@ let serialize_houses (houses : parsed_house list) : string list list =
       | None -> "", "", "" in
 
       let uniform_size, min_size, max_size = string_of_size sizes in
-      [ residence_type;
+      [ address;
+        residence_type;
         uniform_size;
         min_size;
         max_size;

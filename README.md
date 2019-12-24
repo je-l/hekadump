@@ -36,6 +36,7 @@ dune exec hekadump.exe
 
 | column | required | description |
 | ------ | -------- | ----------- |
+| address | x | |
 | apartment type | x | e.g. "1h + k" |
 | apartment size (exact) | | this is found if all apartments have same size |
 | apartment size (minimum) | | minimum apartment size if there are multiple |
