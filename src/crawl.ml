@@ -43,17 +43,20 @@ let fetch_links (url : string) : pagination_crawl_result Lwt.t =
     next_page = parse_next_page html
   }
 
-(** Extract house links from all pages, until no more pages are left. *)
-let rec crawl_all_pages (url : string) : string list Lwt.t =
+(** Extract house links from all pages, until no more pages are left.
+
+@return list of pages with list of links of houses
+*)
+let rec crawl_all_pages (url : string) : string list list Lwt.t =
   Lwt_io.printlf "crawling page %s" url >>= fun () ->
   fetch_links url >>= fun result ->
   let { house_links; next_page } = result in
 
   match next_page with
-      None -> return house_links
+      None -> return [house_links]
     | Some next ->
-        if debug then return house_links
-        else crawl_all_pages next >|= fun next -> house_links @ next
+        if debug then return [house_links]
+        else crawl_all_pages next >|= fun next -> house_links :: next
 
 let find_string
   (page : string)
@@ -210,13 +213,21 @@ let serialize_houses (houses : parsed_house list) : string list list =
   List.flatten apartments
 
 let main : unit Lwt.t =
+  Lwt_io.printl "looking up all house links..." >>= fun () ->
   crawl_all_pages initial_page >>= fun house_links ->
-  Lwt_io.printlf
-    "crawling %d house pages..."
-    (List.length house_links) >>= fun () ->
-      Lwt_list.map_s fetch_house house_links >>= fun houses ->
-      let all_rows = columns :: serialize_houses (cat_maybes houses) in
-      Csv.save output_file all_rows;
-      Lwt_io.printlf "output written to %s" output_file
+
+  Lwt_io.printl "crawling into house links..." >>= fun () ->
+
+  (* Fetch all houses in parallel for single pagination *)
+  let fetch_parallel page_of_houses =
+    Lwt_list.map_p fetch_house page_of_houses in
+
+  Lwt_list.map_s fetch_parallel house_links >>= fun house_batches ->
+
+  let houses = cat_maybes (List.flatten house_batches) in
+  let all_rows = columns :: serialize_houses houses in
+
+  Csv.save output_file all_rows;
+  Lwt_io.printlf "output written to %s" output_file
 
 let run () = Lwt_main.run main
