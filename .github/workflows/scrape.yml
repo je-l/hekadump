@@ -14,12 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Build and run the Docker image
-      id: build
-      run: docker build -t hekadump . && docker run --name $CONTAINER_NAME hekadump
-    - name: Copy output csv from image to host
-      run: docker cp $CONTAINER_NAME:${{ steps.build.outputs.output_path }} .
+    - name: Build the Docker image
+      run: docker build --pull -t hekadump .
+    - name: Run the program
+      id: run
+      run: docker run --name $CONTAINER_NAME hekadump
+    - name: Copy output csv from container to host
+      run: docker cp $CONTAINER_NAME:${{ steps.run.outputs.output_path }} .
     - uses: actions/upload-artifact@v1
       with:
-        name: ${{ steps.build.outputs.output_file }}
-        path: ./${{ steps.build.outputs.output_file }}
+        name: ${{ steps.run.outputs.output_file }}
+        path: ./${{ steps.run.outputs.output_file }}
