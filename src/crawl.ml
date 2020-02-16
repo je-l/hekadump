@@ -71,15 +71,13 @@ let find_string
           None -> failwith (sprintf "cannot find string text from %s" selector)
         | Some t -> t
 
-let find_integer_opt page html selector =
-  let text = find_string page html selector in
-  int_of_string_opt text
-
-let find_integer page html selector =
-  let text = find_integer_opt page html selector in
+let find_integer_opt html selector =
+  let text = select_one selector html in
   match text with
-      None -> failwith (sprintf "cannot parse int from selector %s" selector)
-    | Some t -> t
+    None -> None
+    | Some t -> match leaf_text t with
+        None -> None
+      | Some e -> int_of_string_opt e
 
 (* There are few housings with build years like "1950-1960". Skip those for now.
 TODO: parse the starting year or compute average? *)
@@ -130,33 +128,37 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
     Lwt_io.printlf "warning: detected page %s as under construction" url >|=
     fun () -> None
   else
-    let css_int = find_integer url html in
     let build_year = find_year url html in
     let district = find_district html in
-    let identifier = css_int ".field--name-field-vmy-number .field__item" in
-    let address = find_string url html "div.kiinteiston-nimi span" in
+    let opt_identifier =
+      find_integer_opt html ".field--name-field-vmy-number .field__item" in
 
-    let err_print_table ap = match ap with
-      Success table -> return @@ Some table
-    | Anomaly reason ->
-        Lwt_io.printlf
-          "weird apartment row skipped at %s: %s"
-          url
-          reason >|= fun () -> None
-    | ApartmentError reason ->
-        failwith (sprintf "failed to parse table for %s: %s" url reason) in
+    match opt_identifier with
+      None -> Lwt_io.printlf "missing identifier for: %s" url >|= fun () -> None
+    | Some identifier ->
+      let address = find_string url html "div.kiinteiston-nimi span" in
 
-    let table = parse_apartment_table html in
-    let floor_count = parse_floor_count html in
-    Lwt_list.filter_map_s err_print_table table >>= fun apartment_table ->
-    return @@ Some { build_year;
-      floor_count;
-      apartment_table;
-      district;
-      identifier;
-      url;
-      address;
-    }
+      let err_print_table ap = match ap with
+        Success table -> return @@ Some table
+      | Anomaly reason ->
+          Lwt_io.printlf
+            "weird apartment row skipped at %s: %s"
+            url
+            reason >|= fun () -> None
+      | ApartmentError reason ->
+          failwith (sprintf "failed to parse table for %s: %s" url reason) in
+
+      let table = parse_apartment_table html in
+      let floor_count = parse_floor_count html in
+      Lwt_list.filter_map_s err_print_table table >>= fun apartment_table ->
+      return @@ Some { build_year;
+        floor_count;
+        apartment_table;
+        district;
+        identifier;
+        url;
+        address;
+      }
 
 let string_of_size (ap : apartment_size) : (string * string * string) =
   match ap with
