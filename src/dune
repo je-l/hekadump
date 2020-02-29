@@ -1,4 +1,5 @@
 (library
  (name hekadump)
  (public_name hekadump)
- (libraries lwt cohttp cohttp-lwt-unix tls lambdasoup re alcotest csv))
+ (preprocess (pps ppx_deriving.show))
+ (libraries lwt cohttp cohttp-lwt-unix tls lambdasoup re alcotest csv str))

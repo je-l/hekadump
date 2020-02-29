@@ -1,4 +1,5 @@
 open Hekadump.Parse
+open Hekadump.Strings
 
 let test_uniform_floor_count () =
   match parse_floor_text "123" with
@@ -40,6 +41,29 @@ let test_year_parse_invalid () =
     None -> ()
     | Some _ -> Alcotest.fail "should not parse year range"
 
+let test_apartment_type_parsing () =
+  let apartment_print formatter a =
+    Format.fprintf
+    formatter
+    "%s"
+    (show_apartment_parse_result a) in
+
+  let apartment = Alcotest.testable apartment_print ( = ) in
+
+  let testcases (raw_text, expected) =
+    Alcotest.check
+      apartment
+      "expected apartment type"
+      expected
+      (parse_apartment_type raw_text) in
+
+  let type_texts =
+    [ ("2h + k", Ok { room_count = 2; features = [Keittio]})
+    ; ("15h +   kt", Ok { room_count = 15; features = [KeittoTila]})
+    ; ("4h+kt", Ok { room_count = 4; features = [KeittoTila]})
+    ] in
+  List.iter testcases type_texts
+
 let () =
   Alcotest.run "Hekadump"
     [
@@ -49,7 +73,8 @@ let () =
         Alcotest.test_case "minmax rent" `Quick test_min_max_rent;
         Alcotest.test_case "apartment count" `Quick test_apartment_count;
         Alcotest.test_case "regular year parsing" `Quick test_year_parse_normal;
-        Alcotest.test_case "year range parsing" `Quick test_year_parse_invalid
+        Alcotest.test_case "year range parsing" `Quick test_year_parse_invalid;
+        Alcotest.test_case "apartment type" `Quick test_apartment_type_parsing;
         ]
       )
     ]

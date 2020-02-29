@@ -1,6 +1,6 @@
 (executable
  (name hekadump_test)
- (libraries alcotest hekadump))
+ (libraries alcotest hekadump fmt ppx_deriving))
 
 (rule
  (alias runtest)

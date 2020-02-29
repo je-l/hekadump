@@ -1,6 +1,7 @@
 open Re
 open Printf
 open Soup
+open Strings
 
 type int_or_int_range = Uniform of int | MinMax of int * int
 
@@ -40,18 +41,6 @@ type parsed_house =
     address         : string;
   }
 
-(* Pervasives.float_of_string only parses floats with dot *)
-let float_of_string_finnish_opt (text : string) : float option =
-  let comma = Pcre.regexp "," in
-  let sub _ = "." in
-  let replaced = Pcre.substitute ~rex:comma ~subst:sub text in
-  float_of_string_opt replaced
-
-let float_of_string_finnish (text : string) : float =
-  match float_of_string_finnish_opt text with
-      None -> failwith (sprintf "cannot parse: %s\n" text)
-    | Some t -> t
-
 (*
 First remove whitespace, then parse the min/max pair:
 
@@ -85,17 +74,6 @@ let parse_apartment_sizes (text : string) : apartment_size option =
     | _ -> (match float_of_string_finnish_opt text with
         None -> failwith (sprintf "text: %s\n" text)
       | Some e -> Some (Same e))
-
-let parse_apartment_count (text : string) : int option =
-  match int_of_string_opt text with
-    Some num -> Some num
-  | None ->
-      let re = Pcre.regexp "(\\d+) kpl" in
-      let groups = try Some (Pcre.extract ~rex:re text) with
-      Not_found -> None in
-      match groups with
-        Some [|_; count |] -> Some (int_of_string (String.trim count))
-        | _ -> None
 
 type table_row_result =
   ApartmentError of string (* Unexpected row *)
@@ -166,3 +144,52 @@ let parse_build_year (text : string) : int option =
       if Pcre.pmatch ~rex:re text
       then None else failwith (sprintf "unexpected build year %s" text)
   | Some y -> Some y
+
+type apartment_feature =
+  Keittio
+  | KeittoTila
+(* TODO: add all others *)
+[@@deriving show]
+
+type apartment_type =
+  { room_count : int;
+    features : apartment_feature list;
+  }
+[@@deriving show]
+
+type apartment_parse_result = (apartment_type, string) result
+[@@deriving show]
+
+let feature_of_str text =
+  match text with
+  "k" -> Keittio
+  | "kt" -> KeittoTila
+  | _ -> failwith (sprintf "unknown feature: '%s'\n" text)
+
+let parse_apartment_features text =
+  let feature_re = Pcre.regexp "\\d+h\\+(.*)" in
+  let groups = try Some (Pcre.extract ~rex:feature_re text) with
+    Not_found -> None in
+
+  match groups with
+    Some [|_; feature_text|] ->
+      let parts = String.split_on_char '+' feature_text in
+      Ok (List.map feature_of_str parts)
+    | _ -> Error "failed to match regex for apartment features"
+
+let parse_apartment_type text : (apartment_type, string) result =
+  let no_whitespace = remove_whitespace text in
+  let room_count_re = Pcre.regexp "(\\d+)h" in
+  let groups = try Some (Pcre.extract ~rex:room_count_re no_whitespace) with
+    Not_found -> None in
+
+  match groups with
+    Some [|_; count_text |] -> begin
+      match parse_apartment_features no_whitespace with
+        Ok features ->
+          Ok { room_count = int_of_string count_text
+             ; features = features
+             }
+      | Error e -> Error e
+    end
+    | _ -> Error "regex failed for apartment parse"
