@@ -61,6 +61,10 @@ let test_apartment_type_parsing () =
     [ ("2h + k", Ok { room_count = 2; features = [Keittio]})
     ; ("15h +   kt", Ok { room_count = 15; features = [KeittoTila]})
     ; ("4h+kt", Ok { room_count = 4; features = [KeittoTila]})
+    ; ("6h+ tupak", Ok { room_count = 6; features = [TupaKeittio]})
+    ; ("1h+ k (inva)", Ok { room_count = 1; features = [InvaKeittio]})
+    ; ("4 h + k + s", Ok { room_count = 4; features = [Keittio; Sauna]})
+    ; ("2 h+k+khh", Ok { room_count = 2; features = [Keittio; KodinHoitoHuone]})
     ] in
   List.iter testcases type_texts
 

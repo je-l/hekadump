@@ -148,6 +148,10 @@ let parse_build_year (text : string) : int option =
 type apartment_feature =
   Keittio
   | KeittoTila
+  | TupaKeittio
+  | InvaKeittio
+  | Sauna
+  | KodinHoitoHuone
 (* TODO: add all others *)
 [@@deriving show]
 
@@ -160,10 +164,15 @@ type apartment_type =
 type apartment_parse_result = (apartment_type, string) result
 [@@deriving show]
 
+(* https://fi.wikipedia.org/wiki/Luettelo_asuntokaupassa_k%C3%A4ytett%C3%A4vist%C3%A4_lyhenteist%C3%A4 *)
 let feature_of_str text =
-  match text with
+  match String.lowercase_ascii text with
   "k" -> Keittio
   | "kt" -> KeittoTila
+  | "tupak" -> TupaKeittio
+  | "k(inva)" -> InvaKeittio
+  | "khh" -> KodinHoitoHuone
+  | "s" -> Sauna
   | _ -> failwith (sprintf "unknown feature: '%s'\n" text)
 
 let parse_apartment_features text =
