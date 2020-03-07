@@ -68,6 +68,21 @@ let test_apartment_type_parsing () =
     ] in
   List.iter testcases type_texts
 
+let read_file (filename : string) : string =
+  let file_stream = open_in filename in
+  really_input_string file_stream (in_channel_length file_stream)
+
+
+let read_lines (filename : string) : string list =
+  let contents = read_file filename in
+  Str.split (Str.regexp "\n") contents
+
+let test_apartment_type_doesnt_crash () =
+  let types = read_lines "types.txt" in
+  let filtered_types = List.filter skip_apartment types in
+  let tests t = match (parse_apartment_type t) with Ok _ -> () | Error e -> Alcotest.fail e in
+  List.iter tests filtered_types
+
 let () =
   Alcotest.run "Hekadump"
     [
@@ -79,6 +94,7 @@ let () =
         Alcotest.test_case "regular year parsing" `Quick test_year_parse_normal;
         Alcotest.test_case "year range parsing" `Quick test_year_parse_invalid;
         Alcotest.test_case "apartment type" `Quick test_apartment_type_parsing;
+        Alcotest.test_case "apartment type parsing doesnt crash" `Quick test_apartment_type_doesnt_crash;
         ]
       )
     ]

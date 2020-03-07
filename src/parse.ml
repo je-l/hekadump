@@ -15,6 +15,13 @@ type rent = int_or_int_range
 let initial_page = "https://www.hekaoy.fi/fi/asunnot/kohteet"
 let root_page = "https://www.hekaoy.fi"
 
+(* Skip apartments with these types *)
+let skip_apartment t = match t with
+  "kehitysvammaisten ryhmäkoti" -> false
+  | "Päiväkoti" -> false
+  | "Päiväkoti." -> false
+  | _ -> true
+
 (** Single page, e.g. https://www.hekaoy.fi/fi/asunnot/kohteet?page=3 *)
 type pagination_crawl_result =
   { house_links : string list;
@@ -146,12 +153,49 @@ let parse_build_year (text : string) : int option =
   | Some y -> Some y
 
 type apartment_feature =
-  Keittio
+  Alkovi
+  | Keittio
+  | KeittoKomero
   | KeittoTila
-  | TupaKeittio
-  | InvaKeittio
-  | Sauna
   | KodinHoitoHuone
+  | KeittoSyvennys
+  | KylpyHuone
+  | WhatIsLk
+  | TupaKeittio
+  | TuuliKaappi
+  | InvaKeittoKomero
+  | LisaHuone
+  | KeittioTaiKeittoTila
+  | InvaKeittio
+  | Tp
+  | KeittoTilaKauttaKaksHoo
+  | KSoluasunto
+  | KeittoKomeroTaiKeittio
+  | TerassiPiha
+  | Sauna
+  | PeeKirjain
+  | VaateHuone
+  | Parveke
+  | SoluParveke
+  | KeittioSolu
+  | LisaAs
+  | AvoKeittio
+  | InvaKeittoTila
+  | PTaiTerassi
+  | ParvekeKahdessaTasossa
+  | Solu
+  | Piha
+  | MaatasoParveke
+  | RuokailuTila
+  | TuplaKylpyHuone
+  | TuplaKeittio
+  | RKirjain
+  | TuplaVaateHuone
+  | Paivakoti
+  | KeittoKomeroTukiAsunto
+  | MiniKeittio
+  | TyoTila
+  | SuihkuHuone
 (* TODO: add all others *)
 [@@deriving show]
 
@@ -167,16 +211,64 @@ type apartment_parse_result = (apartment_type, string) result
 (* https://fi.wikipedia.org/wiki/Luettelo_asuntokaupassa_k%C3%A4ytett%C3%A4vist%C3%A4_lyhenteist%C3%A4 *)
 let feature_of_str text =
   match String.lowercase_ascii text with
-  "k" -> Keittio
+  "alk" -> Alkovi
+  | "alkovi" -> Alkovi
+  | "k" -> Keittio
   | "kt" -> KeittoTila
+  | "parveke(kahdessatasossa)" -> ParvekeKahdessaTasossa
+  | "kk" -> KeittoKomero
+  | "kph" -> KylpyHuone
+  | "kh" -> KylpyHuone
+  | "lisäas" -> LisaAs
+  | "ksyv" -> KeittoSyvennys
+  | "ks" -> KeittoSyvennys
+  | "avok" -> AvoKeittio
+  | "ktinva" -> InvaKeittoTila
+  | "ksolu" -> KeittioSolu
+  | "ptaiterassi" -> PTaiTerassi
+  | "terassipiha" -> TerassiPiha
   | "tupak" -> TupaKeittio
+  | "tupak." -> TupaKeittio
+  | "rt" -> RuokailuTila
+  | "kkinva" -> InvaKeittoKomero
+  | "tpk" -> TupaKeittio
+  | "kk/k" -> KeittoKomeroTaiKeittio
+  | "k/kk" -> KeittoKomeroTaiKeittio
+  | "minik" -> MiniKeittio
+  | "tupakeittiö" -> TupaKeittio
   | "k(inva)" -> InvaKeittio
+  | "työtila" -> TyoTila
+  | "kktukiasunto" -> KeittoKomeroTukiAsunto
+  | "k/kt" -> KeittioTaiKeittoTila
+  | "k(inva-asunto)" -> InvaKeittio
+  | "2kph" -> TuplaKylpyHuone
+  | "r" -> RKirjain
+  | "maatasoparveke" -> MaatasoParveke
+  | "2vh" -> TuplaVaateHuone
+  | "kk(inva-asunto)" -> InvaKeittoKomero
+  | "kinva" -> InvaKeittio
+  | "lk" -> WhatIsLk
+  | "lisäh" -> LisaHuone
+  | "p" -> PeeKirjain
+  | "tk" -> TuuliKaappi
+  | "k-2h" -> TuplaKeittio
+  | "ksoluasunto" -> KSoluasunto
+  | "kt/2h" -> KeittoTilaKauttaKaksHoo
+  | "vh" -> VaateHuone
+  | "tp" -> Tp
+  | "parveke(solu)" -> SoluParveke
   | "khh" -> KodinHoitoHuone
+  | "piha" -> Piha
+  | "parveke" -> Parveke
+  | "solu" -> Solu
+  | "sauna" -> Sauna
   | "s" -> Sauna
+  | "lh" -> Sauna
+  | "sh" -> SuihkuHuone
   | _ -> failwith (sprintf "unknown feature: '%s'\n" text)
 
 let parse_apartment_features text =
-  let feature_re = Pcre.regexp "\\d+h\\+(.*)" in
+  let feature_re = Pcre.regexp "\\d+[hH]?v?\\+(.*)" in
   let groups = try Some (Pcre.extract ~rex:feature_re text) with
     Not_found -> None in
 
@@ -188,7 +280,7 @@ let parse_apartment_features text =
 
 let parse_apartment_type text : (apartment_type, string) result =
   let no_whitespace = remove_whitespace text in
-  let room_count_re = Pcre.regexp "(\\d+)h" in
+  let room_count_re = Pcre.regexp "(\\d+) *[hH]?v?" in
   let groups = try Some (Pcre.extract ~rex:room_count_re no_whitespace) with
     Not_found -> None in
 
@@ -199,6 +291,6 @@ let parse_apartment_type text : (apartment_type, string) result =
           Ok { room_count = int_of_string count_text
              ; features = features
              }
-      | Error e -> Error e
+      | Error e -> Error (sprintf "failed to parse %s: %s" text e)
     end
-    | _ -> Error "regex failed for apartment parse"
+    | _ -> Error (sprintf "regex failed for apartment parse: %s" text)

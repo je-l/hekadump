@@ -4,5 +4,6 @@
 
 (rule
  (alias runtest)
+ (deps types.txt)
  (action
   (run ./hekadump_test.exe)))
