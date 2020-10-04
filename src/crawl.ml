@@ -229,6 +229,8 @@ let main : unit Lwt.t =
   let houses = cat_maybes (List.flatten house_batches) in
   let all_rows = columns :: serialize_houses houses in
 
+  assert (List.length all_rows > 0);
+
   Csv.save output_file all_rows;
   Lwt_io.printlf "output written to %s" output_file
 
