@@ -128,7 +128,7 @@ let parse_next_page (html : soup node) : string option =
       | Some link -> Some (initial_page ^ link)
 
 let parse_page_houses (html : soup node) : string list =
-  let link_elements = select ".node--type-kiinteisto h4 a" html in
+  let link_elements = select ".node--type-kiinteisto div.field a" html in
   let maybe_links = List.map (attribute "href") (to_list link_elements) in
   let unsafe_filter el = match el with
       Some a -> a
