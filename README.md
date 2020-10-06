@@ -52,3 +52,5 @@ dune exec hekadump.exe
 | identifier | x | labeled as "kohteen tunnus" in the pages |
 | district | x | "kaupunginosa" |
 | url | x | |
+| latitude | x | latitude in WGS84 coordinate system |
+| longitude | x | longitude in WGS84 coordinate system |

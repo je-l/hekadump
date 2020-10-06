@@ -39,6 +39,8 @@ type parsed_house =
     apartment_table : apartment list;
     url             : string;
     address         : string;
+    latitude        : float;
+    longitude       : float;
   }
 
 (*
@@ -126,6 +128,23 @@ let parse_next_page (html : soup node) : string option =
     | Some el -> match attribute "href" el with
         None -> None
       | Some link -> Some (initial_page ^ link)
+
+let find_geolocation_div (html : soup node) : element node =
+  match select_one "div.geolocation-location" html with
+      None -> failwith "cannot find geolocation element"
+    | Some el -> el
+
+let parse_latitude (html : soup node) : float =
+  let geolocation_div = find_geolocation_div html in
+  match attribute "data-lat" geolocation_div with
+        None -> failwith "no data-lat attribute"
+      | Some lat -> float_of_string lat
+
+let parse_longitude (html : soup node) : float =
+  let geolocation_div = find_geolocation_div html in
+  match attribute "data-lng" geolocation_div with
+      None -> failwith "no data-lng attribute"
+    | Some lat -> float_of_string lat
 
 let parse_page_houses (html : soup node) : string list =
   let link_elements = select ".node--type-kiinteisto div.field a" html in

@@ -27,7 +27,9 @@ let columns =
     "floor_count_maximum";
     "identifier";
     "district";
-    "url"
+    "url";
+    "latitude";
+    "longitude"
   ]
 
 let cat_maybes (options : 'a option list) : 'a list =
@@ -148,6 +150,9 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
       | ApartmentError reason ->
           failwith (sprintf "failed to parse table for %s: %s" url reason) in
 
+      let latitude = parse_latitude html in
+      let longitude = parse_longitude html in
+
       let table = parse_apartment_table html in
       let floor_count = parse_floor_count html in
       Lwt_list.filter_map_s err_print_table table >>= fun apartment_table ->
@@ -158,6 +163,8 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
         identifier;
         url;
         address;
+        latitude;
+        longitude;
       }
 
 let string_of_size (ap : apartment_size) : (string * string * string) =
@@ -182,6 +189,8 @@ let serialize_houses (houses : parsed_house list) : string list list =
         apartment_table;
         url;
         address;
+        latitude;
+        longitude;
       } = house in
 
     let apartment_list apt =
@@ -208,6 +217,8 @@ let serialize_houses (houses : parsed_house list) : string list list =
         string_of_int identifier;
         (match district with Some d -> d | None -> "");
         url;
+        string_of_float latitude;
+        string_of_float longitude;
       ] in
     List.map apartment_list apartment_table in
 
