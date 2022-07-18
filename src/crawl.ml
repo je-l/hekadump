@@ -83,12 +83,12 @@ let find_integer_opt html selector =
 
 (* There are few housings with build years like "1950-1960". Skip those for now.
 TODO: parse the starting year or compute average? *)
-let find_year url html =
-  let year = find_string
-    url
-    html
-    ".field--name-field-year-built .field__item" in
-  parse_build_year year
+let find_year html =
+  match select_one ".field--name-field-year-built .field__item" html with
+  | None -> None
+  | Some n -> match leaf_text n with
+    | None -> None
+    | Some t -> parse_build_year t
 
 (** Floor count CSS classes are misleading: either one of these two is used.
 The text content might look something like "4 - 6" *)
@@ -130,7 +130,7 @@ let fetch_house (url : string) : parsed_house option Lwt.t =
     Lwt_io.printlf "warning: detected page %s as under construction" url >|=
     fun () -> None
   else
-    let build_year = find_year url html in
+    let build_year = find_year html in
     let district = find_district html in
     let opt_identifier =
       find_integer_opt html ".field--name-field-vmy-number .field__item" in
