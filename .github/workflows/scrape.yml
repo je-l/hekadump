@@ -14,13 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Build the Docker image
-      run: docker build --pull -t hekadump .
+    - uses: ocaml/setup-ocaml@v2
+      with:
+        ocaml-compiler: 4.13.x
+    - name: Install dependencies
+      run: opam install .
+    - name: Build the program
+      run: opam exec -- dune build
     - name: Run the program
       id: run
-      run: docker run --name $CONTAINER_NAME hekadump
-    - name: Copy output csv from container to host
-      run: docker cp $CONTAINER_NAME:${{ steps.run.outputs.output_path }} .
+      run: ./release.sh
     - uses: actions/upload-artifact@v1
       with:
         name: ${{ steps.run.outputs.output_file }}

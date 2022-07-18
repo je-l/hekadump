@@ -7,7 +7,7 @@ TIMESTAMP=$(date -uI)
 OUT=${FILE%.csv}_$TIMESTAMP.csv
 
 dune runtest
-dune exec hekadump.exe
+./_build/default/main.exe
 
 mv $FILE "$OUT"
 
