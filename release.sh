@@ -6,7 +6,7 @@ FILE=heka_crawl.csv
 TIMESTAMP=$(date -uI)
 OUT=${FILE%.csv}_$TIMESTAMP.csv
 
-dune runtest
+opam exec -- dune runtest
 ./_build/default/main.exe
 
 mv $FILE "$OUT"
